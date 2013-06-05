@@ -3,7 +3,7 @@
 <!-- Adapted to work with the getUserMedia API using code from http://wesbos.com/html5-video-face-detection-canvas-javascript/ -->
 	<head>
 		<meta charset="utf-8">
-		<title>HTML5 Face Detection - JavaScript getUserMedia API and Groucho Marx glasses!</title>
+		<title>Face Index Experiment</title>
 		<style>
 body {
 	font-family: sans-serif;
@@ -13,7 +13,7 @@ body {
 	width: 100%;
 	height: 100%;
 	margin: 0;
-	text-align: center;
+	/* text-align: center; */
 	background-color: #111;
 }
 
@@ -26,16 +26,22 @@ body {
 }
 
 #output {
-	width: auto;
-	height: 100%;
+	/* width: auto;
+	height: 100%; */
 	background: black;
-	-webkit-transform: scale(-1, 1);
+	/* -webkit-transform: scale(0.5, 0.5); */
 }
+
 		</style>
 	</head>
 	<body>
 		<p id="info">Please allow access to your camera!</p>
 		<canvas id="output"></canvas>
+		<canvas id="facefinder"></canvas>
+		<br />
+		<div class="faceframe"></div>
+		<div class="faceframe"></div>
+		<div class="faceframe"></div>
 		<script src="ccv.js"></script>
 		<script src="face.js"></script>
 		<script>
@@ -76,6 +82,8 @@ var App = {
 				App.backCanvas.width = App.video.videoWidth / 4;
 				App.backCanvas.height = App.video.videoHeight / 4;
 				App.backContext = App.backCanvas.getContext('2d');
+				App.captureCanvas.width = App.canvas.width;
+				App.captureCanvas.height = App.canvas.height;
 			
 				var w = 300 / 4 * 0.8,
 					h = 270 / 4 * 0.8;
@@ -105,7 +113,7 @@ var App = {
 	},
 	drawToCanvas: function() {
 		requestAnimationFrame(App.drawToCanvas);
-		
+
 		var video = App.video,
 			ctx = App.context,
 			backCtx = App.backContext,
@@ -115,9 +123,11 @@ var App = {
 			comp;
 		
 		ctx.drawImage(video, 0, 0, App.canvas.width, App.canvas.height);
+		//App.context.drawImage(App.video, 0, 0, App.canvas.width, App.canvas.height);
 		
 		backCtx.drawImage(video, 0, 0, App.backCanvas.width, App.backCanvas.height);
 		
+		/* Huge memory leak in ccv.detect_objects.  Use sparingly!
 		comp = ccv.detect_objects(App.ccv = App.ccv || {
 			canvas: App.backCanvas,
 			cascade: cascade,
@@ -127,24 +137,91 @@ var App = {
 		
 		if (comp.length) {
 			App.comp = comp;
+			App.faces = new Array(comp.length);
 		}
 		
 		for (i = App.comp.length; i--; ) {
-			ctx.drawImage(App.glasses, (App.comp[i].x - w / 2) * m, (App.comp[i].y - w / 2) * m, (App.comp[i].width + w) * m, (App.comp[i].height + w) * m);
+			// Face location
+			var x = (App.comp[i].x - w) * m,
+				y = (App.comp[i].y - w) * m,
+				width = (App.comp[i].width + w) * m,
+				height = (App.comp[i].height + w) * m;
+			
+			App.faces[i] = {
+				x: x - width / 2,
+				y: y - height / 2, 
+				w: width * 2,
+				h: height * 2.2
+			}
+
+			ctx.beginPath();
+			ctx.rect(App.faces[i].x, App.faces[i].y, App.faces[i].w, App.faces[i].h);
+			ctx.lineWidth = 2;
+			ctx.strokeStyle = 'blue';
+			ctx.stroke();
+		} */
+		
+	},
+	capture: function() {
+		console.log('capture!');
+
+		App.captureContext.drawImage(App.canvas, 0, 0)
+
+		var comp = ccv.detect_objects(App.ccv = App.ccv || {
+			canvas: App.captureCanvas,
+			cascade: cascade,
+			interval: 4,
+			min_neighbors: 1
+		});
+
+		var ctx = App.captureContext;
+
+		if (false) {  //if (comp.length) {
+			App.comp = comp;
+			App.faces.length = 0;
+			for (i = App.comp.length; i--; ) {
+				App.faces[i] = {
+					x: App.comp[i].x - App.comp[i].width / 2,
+					y: App.comp[i].y - App.comp[i].height / 2,
+					w: App.comp[i].width * 2,
+					h: App.comp[i].height * 2.2
+				}
+
+				// Box the faces on the captureCanvas
+				ctx.beginPath();
+				ctx.rect(
+					App.faces[i].x, App.faces[i].y, App.faces[i].w, App.faces[i].h
+				);
+				ctx.lineWidth = 2;
+				ctx.strokeStyle = 'blue';
+				ctx.stroke();
+
+			}
+		} else {
+			console.log('no faces found.')
+			return false;
+			// Export whole frame as jpg
+			var dataUrl = App.captureCanvas.toDataURL('image/jpg');
+			App.image.src = dataUrl;
+			if (!App.faceframe.hasChildNodes()) App.faceframe.appendChild(App.image);			
 		}
 	}
 };
 
-App.glasses = new Image();
-App.glasses.src = 'glasses.png';
-
 App.init = function() {
 	App.video = document.createElement('video');
 	App.backCanvas = document.createElement('canvas');
+	App.captureCanvas = document.querySelector('#facefinder');
+	App.captureContext = App.captureCanvas.getContext('2d');
+
+	App.image = new Image();
+	App.faceframe = document.querySelector('div.faceframe');
 	App.canvas = document.querySelector('#output');
 	App.canvas.style.display = 'none';
 	App.context = App.canvas.getContext('2d');
 	App.info = document.querySelector('#info');
+
+	App.faces = [];
 	
 	navigator.getUserMedia_ = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia || navigator.msGetUserMedia;
 	
@@ -163,6 +240,8 @@ App.init = function() {
 	
 	App.video.loop = App.video.muted = true;
 	App.video.load();
+
+	App.canvas.addEventListener('click', App.capture);
 };
 
 App.init();
@@ -170,3 +249,12 @@ App.init();
 		</script>
 	</body>
 </html>
+<!--
+
+1. Show video
+2. Capture Image
+3. Isolate face
+4. Crop
+5. Upload
+
+-->
